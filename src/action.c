@@ -127,6 +127,7 @@ enum action_type {
 	ACTION_TYPE_ZOOM_OUT,
 	ACTION_TYPE_WARP_CURSOR,
 	ACTION_TYPE_HIDE_CURSOR,
+	ACTION_TYPE_RESIZE_STRETCH,
 };
 
 const char *action_names[] = {
@@ -196,6 +197,7 @@ const char *action_names[] = {
 	"ZoomOut",
 	"WarpCursor",
 	"HideCursor",
+	"ResizeStretch",
 	NULL
 };
 
@@ -405,6 +407,16 @@ action_arg_from_xml_node(struct action *action, const char *nodename, const char
 		if (!strcmp(argument, "left") || !strcmp(argument, "right") ||
 				!strcmp(argument, "top") || !strcmp(argument, "bottom")) {
 			action_arg_add_int(action, argument, atoi(content));
+			goto cleanup;
+		}
+		break;
+	case ACTION_TYPE_RESIZE_STRETCH:
+		if (!strcmp(argument, "horizontal") || !strcmp(argument, "vertical") ||
+				!strcmp(argument, "hdivs") || !strcmp(argument, "vdivs")) {
+			action_arg_add_int(action, argument, atoi(content));
+			goto cleanup;
+		} else if (!strcasecmp(argument, "keepAspect")) {
+			action_arg_add_bool(action, argument, parse_bool(content, false));
 			goto cleanup;
 		}
 		break;
@@ -1092,6 +1104,16 @@ actions_run(struct view *activator, struct server *server,
 				int top = action_get_int(action, "top", 0);
 				int bottom = action_get_int(action, "bottom", 0);
 				view_resize_relative(view, left, right, top, bottom);
+			}
+			break;
+		case ACTION_TYPE_RESIZE_STRETCH:
+			if (view) {
+				int horizontal = action_get_int(action, "horizontal", 0);
+				int vertical = action_get_int(action, "vertical", 0);
+				int hdivs = action_get_int(action, "hdivs", 0);
+				int vdivs = action_get_int(action, "vdivs", 0);
+				bool keep_aspect= action_get_bool(action, "keepAspect", false);
+				view_resize_stretch(view, horizontal, vertical, hdivs, vdivs, keep_aspect);
 			}
 			break;
 		case ACTION_TYPE_MOVETO:
