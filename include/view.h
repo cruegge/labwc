@@ -225,6 +225,8 @@ struct view {
 	 */
 	struct wlr_box last_layout_geometry;
 
+	struct wlr_box stretch_invariant;
+
 	/* used by xdg-shell views */
 	uint32_t pending_configure_serial;
 	struct wl_event_source *pending_configure_timeout;
@@ -480,6 +482,7 @@ void view_close(struct view *view);
 void view_move_resize(struct view *view, struct wlr_box geo);
 void view_resize_relative(struct view *view,
 	int left, int right, int top, int bottom);
+void view_resize_stretch(struct view *view, int horizontal, int vertical, int hdivs, int vdivs, bool keep_aspect);
 void view_move_relative(struct view *view, int x, int y);
 void view_move(struct view *view, int x, int y);
 void view_move_to_cursor(struct view *view);

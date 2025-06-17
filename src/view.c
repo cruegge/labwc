@@ -30,6 +30,7 @@
 #include "ssd.h"
 #include "theme.h"
 #include "window-rules.h"
+#include "wlr/util/box.h"
 #include "wlr/util/log.h"
 #include "workspaces.h"
 
@@ -647,6 +648,137 @@ view_resize_relative(struct view *view, int left, int right, int top, int bottom
 	newgeo.height += top + bottom;
 	view_move_resize(view, newgeo);
 	view_set_untiled(view);
+}
+
+static int
+divround(int a, int b) {
+	int s = (a >= 0) == (b >= 0) ? 1 : -1;
+	return (a + s * b / 2) / b;
+}
+
+void
+view_resize_stretch(struct view *view, int horizontal, int vertical, int hdivs, int vdivs, bool keep_aspect)
+{
+	if (horizontal == 0 && vertical == 0) {
+		return;
+	}
+
+	assert(view);
+	if (view->fullscreen || view->maximized != VIEW_AXIS_NONE) {
+		return;
+	}
+
+	view_set_shade(view, false);
+
+	const struct border ssd = ssd_thickness(view);
+	const struct wlr_box usable = output_usable_area_in_layout_coords(view->output);
+
+	const struct wlr_box inner = view->pending;
+	const struct wlr_box outer = {
+		.x = inner.x - ssd.left,
+		.y = inner.y - ssd.top,
+		.width = inner.width + ssd.left + ssd.right,
+		.height = inner.height + ssd.top + ssd.bottom,
+	};
+
+	struct wlr_box inv = view->stretch_invariant;
+
+	if (abs((outer.x - usable.x) * inv.width - (outer.width - usable.width) * inv.x) >= abs(inv.width) / 2) {
+		if (outer.width == usable.width) {
+			inv.x = 1;
+			inv.width = 2;
+		} else {
+			inv.x = outer.x - usable.x;
+			inv.width = outer.width - usable.width;
+		}
+	}
+
+	if (abs((outer.y - usable.y) * inv.height - (outer.height - usable.height) * inv.y) >= abs(inv.height) / 2) {
+		if (outer.height == usable.height) {
+			inv.y = 1;
+			inv.height = 2;
+		} else {
+			inv.y = outer.y - usable.y;
+			inv.height = outer.height - usable.height;
+		}
+	}
+
+	if (inv.width == 0 || inv.height == 0) {
+		// Should be impossible, but let's be sure in order to prevent zero division.
+		return;
+	}
+
+	struct wlr_box new_outer = outer;
+
+	if (horizontal == 0) {
+		// noop
+	} else if (hdivs != 0) {
+		int nx = ((outer.width + 1) * hdivs) / usable.width;
+		nx = MAX(1, MIN(hdivs, nx + horizontal));
+		new_outer.width = (nx * usable.width) / hdivs;
+	} else {
+		new_outer.width += horizontal;
+		new_outer.width = MAX(32, MIN(usable.width, outer.width));
+	}
+
+	if (horizontal != 0 && new_outer.width == outer.width) {
+		return;
+	}
+
+	if (vertical == 0) {
+		// noop
+	} else if (vdivs != 0) {
+		int ny = ((outer.height + 1) * vdivs) / usable.height;
+		ny = MAX(1, MIN(vdivs, ny + vertical));
+		new_outer.height = (ny * usable.height) / vdivs;
+	} else {
+		new_outer.height += vertical;
+		new_outer.height = MAX(32, MIN(usable.height, outer.height));
+	}
+
+	if (vertical != 0 && new_outer.height == outer.height) {
+		return;
+	}
+
+	if (keep_aspect) {
+		if (horizontal == 0) {
+			new_outer.width = (new_outer.height * outer.width) / outer.height;
+		} else if (vertical == 0) {
+			new_outer.height = (new_outer.width * outer.height) / outer.width;
+		} else {
+			int dw = new_outer.width - outer.width;
+			int dh = new_outer.height - outer.height;
+			if ((dw > 0 && dh < 0) || (dw < 0 && dh > 0)) {
+				// Keeping aspect ratio makes no sense if one direction grows while the other shrinks. Abort.
+				return;
+			}
+			int da = new_outer.width * outer.height - new_outer.height * outer.width;
+			if (da != 0) {
+				bool grow = dw > 0 || dh > 0;
+				if (grow == (da > 0)) {
+					// Width has changed more than height, relatively. Adjust it.
+					new_outer.width = (new_outer.height * outer.width) / outer.height;
+				} else {
+					// Dito for height.
+					new_outer.height = (new_outer.width * outer.height) / outer.width;
+				}
+			}
+		}
+	}
+
+	new_outer.x = divround(usable.x * inv.width + inv.x * (new_outer.width - usable.width), inv.width);
+	new_outer.y = divround(usable.y * inv.height + inv.y * (new_outer.height - usable.height), inv.height);
+
+	const struct wlr_box new_inner = {
+		.x = new_outer.x + ssd.left,
+		.y = new_outer.y + ssd.top,
+		.width = new_outer.width - ssd.left - ssd.right,
+		.height = new_outer.height - ssd.top - ssd.bottom,
+	};
+
+	view_move_resize(view, new_inner);
+	view_set_untiled(view);
+	view->stretch_invariant = inv;
 }
 
 void
@@ -2539,6 +2671,8 @@ view_init(struct view *view)
 
 	view->title = xstrdup("");
 	view->app_id = xstrdup("");
+
+	memset(&view->stretch_invariant, 0, sizeof(view->stretch_invariant));
 }
 
 void
