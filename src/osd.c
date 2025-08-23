@@ -271,7 +271,7 @@ create_osd_scene(struct output *output, struct wl_array *views)
 {
 	struct server *server = output->server;
 	struct theme *theme = server->theme;
-	bool show_workspace = wl_list_length(&rc.workspace_config.workspaces) > 1;
+	bool show_workspace = false;
 	const char *workspace_name = server->workspaces.current->name;
 
 	int w = theme->osd_window_switcher_width;
