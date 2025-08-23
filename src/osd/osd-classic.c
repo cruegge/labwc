@@ -85,7 +85,7 @@ osd_classic_create(struct output *output, struct wl_array *views)
 	struct window_switcher_classic_theme *switcher_theme =
 		&theme->osd_window_switcher_classic;
 	int padding = theme->osd_border_width + switcher_theme->padding;
-	bool show_workspace = wl_list_length(&rc.workspace_config.workspaces) > 1;
+	bool show_workspace = false;
 	const char *workspace_name = server->workspaces.current->name;
 
 	struct wlr_box output_box;
